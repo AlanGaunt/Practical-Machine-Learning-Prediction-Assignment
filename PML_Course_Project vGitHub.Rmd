@@ -1,0 +1,119 @@
+---
+output: github_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **Practical Machine Learning Prediction Assignment**
+
+### The goal of this project is to predict the manner in which 6 participants perform specific exercises (AKA the "classe" variable in the training set). To complete the predicitons, we will test both a *Classification Tree* and *Random Forest* model to determine the best fit. 
+
+## **Prediction preperation**
+
+```{r results = 'hide'}
+## Checking to ensure required packages are installed
+
+require(caret)
+require(rattle)
+require(rpart)
+require(rpart.plot)
+require(randomForest)
+```
+
+
+```{r}
+## Downloading data file(s)
+
+trainURL = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+## Loading data into memory and identifying NAs
+
+trainRaw = read.csv(url(trainURL), na.strings = c("NA","#DIV/0!",""))
+
+testRaw = read.csv(url(testURL), na.strings = c("NA","#DIV/0!",""))
+
+## Partioning the Training data to enable cross validation. 60% of the data will be use for training, 40% for testing. 
+
+set.seed(1)
+trainPart = createDataPartition(trainRaw$classe, p = .60, list = FALSE)
+inTrain = trainRaw[trainPart, ]
+inTest = trainRaw[-trainPart, ]
+
+## Subsetting partioned data for more accurate fit
+
+NZV = nearZeroVar(trainRaw)
+inTrain = inTrain[, -NZV]
+inTest = inTest[, -NZV]
+
+NAs = sapply(inTrain, function(x) mean(is.na(x))) > 0.95
+inTrain = inTrain[, NAs == FALSE]
+inTest = inTest[, NAs == FALSE]
+
+inTrain  = inTrain[,-(1:5)]
+inTest = inTest[,-(1:5)]
+
+## Subsetting full training set for final fit
+
+trainSub = trainRaw[, -NZV]
+testSub = testRaw[, -NZV]
+
+zNAs = sapply(trainSub, function(x) mean(is.na(x))) > 0.95
+trainSub = trainSub[, zNAs == FALSE]
+testSub = testSub[, zNAs == FALSE]
+
+trainSub  = trainSub[,-(1:5)]
+testSub = testSub[,-(1:5)]
+```
+
+## **Classification Tree**
+
+### The first model tested is a Classification Tree given the outcomes are categorical and processing time is fairly quick.
+
+```{r}
+## Building the Classification Tree model
+
+set.seed(1)
+
+modFit = train(classe ~ ., data = inTrain, method = "rpart")
+fancyRpartPlot(modFit$finalModel)
+
+Predictions = predict(modFit, inTest)
+confusionMatrix(inTest$classe, Predictions)
+```
+
+### The accuracy of the Classification Tree is unsastifactory and could need be used to confidently complete our predictions. 
+
+## **Random Forest**
+
+### The second model tested is a Random Forest given the Classification Tree was largely inaccurate.
+
+```{r}
+## Building the Random Forest model
+
+set.seed(1)
+
+fitControl = trainControl(method = "cv", number = 3)
+
+fit = train(classe ~ ., data = inTrain, method = "rf", trControl = fitControl)
+
+pred = predict(fit, inTest)
+
+confusionMatrix(inTest$classe, pred)
+```
+
+### The accuracy of the Random Forest is signifcantly better than the Classifcation Tree and can be confidently used to complete our predicitions. It's important to note that the out-of-sample error will most likely be higher when applied to the Test set. To reduce the significance, we'll train the model using the full training set and therefore increase our prediction accuracy.
+
+```{r}
+
+finalFit = train(classe ~ ., data = trainSub, method = "rf", trControl = fitControl)
+
+finalPred = predict(finalFit, testSub)
+
+print(finalPred)
+```
+
+## **Results**
+
+### **The final predicitions of this model were 100% accurate when applied to the Project Quiz.**
